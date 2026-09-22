@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Trainy — Chrono Prototype</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Chrono">
+<meta name="theme-color" content="#0f172a">
+
+<style>
+  :root {
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0f172a;
+    color: #e2e8f0;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    height: 100%;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    min-height: 100vh;
+  }
+  .container {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex: 1;
+    min-height: 0;
+  }
+  h1 {
+    font-size: 18px;
+    margin: 4px 0 0 0;
+    font-weight: 600;
+    color: #f8fafc;
+  }
+  .subtitle {
+    font-size: 12px;
+    color: #94a3b8;
+    margin: 0;
+  }
+  .time-display {
+    font-size: 72px;
+    font-weight: 700;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 1px;
+    padding: 20px 0;
+    color: #f8fafc;
+    transition: color 0.2s;
+  }
+  .time-display.done {
+    color: #f87171;
+  }
+  .status-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #94a3b8;
+    min-height: 18px;
+  }
+  .btn-row {
+    display: flex;
+    gap: 10px;
+  }
+  button {
+    flex: 1;
+    padding: 16px 12px;
+    font-size: 16px;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+  }
+  button:active {
+    transform: scale(0.97);
+  }
+  button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  .btn-primary {
+    background: #2563eb;
+    color: white;
+  }
+  .btn-secondary {
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #334155;
+  }
+  .wakelock-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #1e293b;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #64748b;
+  }
+  .dot.active { background: #22c55e; }
+  .dot.error { background: #f87171; }
+
+  .log-section {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    gap: 6px;
+  }
+  .log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .log-header h2 {
+    font-size: 13px;
+    margin: 0;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .clear-btn {
+    flex: none;
+    padding: 6px 10px;
+    font-size: 12px;
+    background: #1e293b;
+    color: #94a3b8;
+    border-radius: 8px;
+  }
+  #log {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: #020617;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .log-line {
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-bottom: 1px solid #0f172a;
+    padding: 2px 0;
+  }
+  .log-line.event { color: #38bdf8; }
+  .log-line.tick { color: #64748b; }
+  .log-line.error { color: #f87171; }
+  .log-line.end { color: #4ade80; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div>
+    <h1>Trainy — Chrono Prototype</h1>
+    <p class="subtitle">Test de fiabilité du chrono JS en PWA standalone (écran verrouillé / arrière-plan)</p>
+  </div>
+
+  <div class="time-display" id="timeDisplay">60.0</div>
+
+  <div class="status-row" id="statusRow"></div>
+
+  <div class="btn-row">
+    <button class="btn-primary" id="startBtn">Démarrer 60s</button>
+    <button class="btn-secondary" id="resetBtn">Reset</button>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn-secondary" id="wakeLockBtn">
+      Wake Lock : <span class="wakelock-indicator"><span class="dot" id="wakeLockDot"></span><span id="wakeLockLabel">inactif</span></span>
+    </button>
+  </div>
+
+  <div class="log-section">
+    <div class="log-header">
+      <h2>Journal</h2>
+      <button class="clear-btn" id="clearLogBtn">Effacer</button>
+    </div>
+    <div id="log"></div>
+  </div>
+</div>
+
+<audio id="beepAudio" preload="auto"></audio>
+
+<script>
+(function () {
+  'use strict';
+
+  const DURATION_MS = 60000;
+  const TICK_LOG_INTERVAL_MS = 5000;
+
+  const timeDisplay = document.getElementById('timeDisplay');
+  const statusRow = document.getElementById('statusRow');
+  const startBtn = document.getElementById('startBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const wakeLockBtn = document.getElementById('wakeLockBtn');
+  const wakeLockDot = document.getElementById('wakeLockDot');
+  const wakeLockLabel = document.getElementById('wakeLockLabel');
+  const logEl = document.getElementById('log');
+  const clearLogBtn = document.getElementById('clearLogBtn');
+
+  let startTime = null;      // Date.now() au clic sur Démarrer
+  let running = false;
+  let finished = false;
+  let lastLoggedBucket = -1; // dernier multiple de 5s loggé (basé sur le temps écoulé)
+  let intervalId = null;
+
+  let wakeLock = null;
+  let wakeLockDesired = false;
+
+  // ---------- Journal visible à l'écran ----------
+
+  function formatClock(date) {
+    const pad = (n, l) => String(n).padStart(l || 2, '0');
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+  }
+
+  function log(message, type) {
+    const line = document.createElement('div');
+    line.className = 'log-line' + (type ? ' ' + type : '');
+    line.textContent = `[${formatClock(new Date())}] ${message}`;
+    logEl.appendChild(line);
+    // limite la taille du DOM pour un test long (10 min+)
+    while (logEl.children.length > 2000) {
+      logEl.removeChild(logEl.firstChild);
+    }
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  clearLogBtn.addEventListener('click', () => {
+    logEl.innerHTML = '';
+    log('Journal effacé', 'event');
+  });
+
+  // ---------- Signal de fin : son + vibration ----------
+
+  let audioCtx = null;
+
+  function ensureAudioContext() {
+    if (!audioCtx) {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (Ctx) audioCtx = new Ctx();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
+    return audioCtx;
+  }
+
+  function playEndSound() {
+    try {
+      const ctx = ensureAudioContext();
+      if (!ctx) {
+        log('Web Audio API non disponible', 'error');
+        return;
+      }
+      const now = ctx.currentTime;
+      // trois bips courts
+      [0, 0.25, 0.5].forEach((offset) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.0001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.3, now + offset + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + 0.2);
+        osc.connect(gain).connect(ctx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + 0.22);
+      });
+      log('Son de fin déclenché (Web Audio API)', 'end');
+    } catch (err) {
+      log('Erreur lors du son de fin : ' + err.message, 'error');
+    }
+  }
+
+  function triggerVibration() {
+    if ('vibrate' in navigator) {
+      const ok = navigator.vibrate([200, 100, 200, 100, 200]);
+      log('Vibration déclenchée (support détecté, appel=' + ok + ')', 'end');
+    } else {
+      log('navigator.vibrate non supporté sur cet appareil/navigateur', 'error');
+    }
+  }
+
+  // ---------- Wake Lock ----------
+
+  function updateWakeLockUI(state) {
+    wakeLockDot.classList.remove('active', 'error');
+    if (state === 'active') {
+      wakeLockDot.classList.add('active');
+      wakeLockLabel.textContent = 'actif';
+    } else if (state === 'error') {
+      wakeLockDot.classList.add('error');
+      wakeLockLabel.textContent = 'erreur';
+    } else if (state === 'unsupported') {
+      wakeLockLabel.textContent = 'non supporté';
+    } else {
+      wakeLockLabel.textContent = 'inactif';
+    }
+  }
+
+  async function requestWakeLock() {
+    if (!('wakeLock' in navigator)) {
+      updateWakeLockUI('unsupported');
+      log('navigator.wakeLock non supporté sur cet appareil/navigateur', 'error');
+      return;
+    }
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      updateWakeLockUI('active');
+      log('Wake Lock activé', 'event');
+      wakeLock.addEventListener('release', () => {
+        log('Wake Lock relâché (release event — normal si app en arrière-plan)', 'event');
+        updateWakeLockUI(wakeLockDesired ? 'inactive' : 'inactive');
+      });
+    } catch (err) {
+      updateWakeLockUI('error');
+      log('Erreur wakeLock.request : ' + err.name + ' — ' + err.message, 'error');
+    }
+  }
+
+  async function releaseWakeLock() {
+    if (wakeLock) {
+      try {
+        await wakeLock.release();
+      } catch (err) {
+        log('Erreur lors du release wakeLock : ' + err.message, 'error');
+      }
+      wakeLock = null;
+    }
+    updateWakeLockUI('inactive');
+  }
+
+  wakeLockBtn.addEventListener('click', async () => {
+    if (wakeLockDesired) {
+      wakeLockDesired = false;
+      await releaseWakeLock();
+      log('Wake Lock désactivé par l\'utilisateur', 'event');
+    } else {
+      wakeLockDesired = true;
+      await requestWakeLock();
+    }
+  });
+
+  // ---------- Chrono basé sur horodatage ----------
+
+  function formatRemaining(ms) {
+    const clamped = Math.max(0, ms);
+    return (clamped / 1000).toFixed(1);
+  }
+
+  function render() {
+    if (!running) return;
+
+    const elapsed = Date.now() - startTime;
+    const remaining = DURATION_MS - elapsed;
+
+    timeDisplay.textContent = formatRemaining(remaining);
+
+    const bucket = Math.floor(Math.min(elapsed, DURATION_MS) / TICK_LOG_INTERVAL_MS);
+    if (bucket > lastLoggedBucket && elapsed < DURATION_MS) {
+      lastLoggedBucket = bucket;
+      log(`Tick — ${(elapsed / 1000).toFixed(1)}s écoulées, reste ${formatRemaining(remaining)}s`, 'tick');
+    }
+
+    if (remaining <= 0 && !finished) {
+      finish();
+    }
+  }
+
+  function finish() {
+    finished = true;
+    running = false;
+    timeDisplay.textContent = '0.0';
+    timeDisplay.classList.add('done');
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    const actualElapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+    log(`Fin du chrono — temps réellement écoulé depuis le départ : ${actualElapsed}s (cible 60s)`, 'end');
+    playEndSound();
+    triggerVibration();
+    startBtn.disabled = false;
+    startBtn.textContent = 'Démarrer 60s';
+    statusRow.textContent = 'Terminé';
+  }
+
+  function start() {
+    if (running) return;
+    finished = false;
+    startTime = Date.now();
+    lastLoggedBucket = -1;
+    running = true;
+    timeDisplay.classList.remove('done');
+    startBtn.disabled = true;
+    startBtn.textContent = 'En cours…';
+    statusRow.textContent = 'En cours';
+
+    // On amorce l'AudioContext ici (dans le geste utilisateur) pour
+    // qu'il soit déjà "unlocked" au moment où le son de fin doit jouer.
+    ensureAudioContext();
+
+    log(`Démarrage du chrono — startTime=${startTime} (${new Date(startTime).toISOString()})`, 'event');
+
+    if (intervalId) clearInterval(intervalId);
+    intervalId = setInterval(render, 200);
+    render();
+  }
+
+  function reset() {
+    running = false;
+    finished = false;
+    if (intervalId) {
+      clearInterval(intervalId);
+      intervalId = null;
+    }
+    startTime = null;
+    lastLoggedBucket = -1;
+    timeDisplay.classList.remove('done');
+    timeDisplay.textContent = formatRemaining(DURATION_MS);
+    startBtn.disabled = false;
+    startBtn.textContent = 'Démarrer 60s';
+    statusRow.textContent = '';
+    log('Reset', 'event');
+  }
+
+  startBtn.addEventListener('click', start);
+  resetBtn.addEventListener('click', reset);
+
+  // ---------- visibilitychange : le cœur du test ----------
+
+  document.addEventListener('visibilitychange', () => {
+    const hidden = document.hidden;
+    log(`visibilitychange → document.hidden=${hidden}`, 'event');
+
+    if (!hidden) {
+      // Retour au premier plan : on force un recalcul immédiat basé sur Date.now()
+      if (running) {
+        const elapsed = Date.now() - startTime;
+        const remaining = DURATION_MS - elapsed;
+        log(`Recalcul au retour au premier plan — elapsed=${(elapsed / 1000).toFixed(2)}s, remaining=${formatRemaining(remaining)}s`, 'event');
+        render();
+      }
+      // Le wake lock est automatiquement relâché par le système quand
+      // l'app passe en arrière-plan ; on tente de le ré-acquérir si désiré.
+      if (wakeLockDesired && !wakeLock) {
+        log('Tentative de ré-acquisition du Wake Lock après retour au premier plan', 'event');
+        requestWakeLock();
+      }
+    }
+  });
+
+  window.addEventListener('pagehide', (e) => {
+    log(`pagehide — persisted=${e.persisted}`, 'event');
+  });
+
+  window.addEventListener('freeze', () => {
+    log('freeze event reçu (page gelée par le navigateur)', 'event');
+  });
+
+  window.addEventListener('resume', () => {
+    log('resume event reçu (page réveillée)', 'event');
+  });
+
+  // ---------- Erreurs ----------
+
+  window.addEventListener('error', (e) => {
+    log(`Erreur JS : ${e.message} (${e.filename}:${e.lineno})`, 'error');
+  });
+
+  window.addEventListener('unhandledrejection', (e) => {
+    log(`Promise rejetée non gérée : ${e.reason}`, 'error');
+  });
+
+  // ---------- Service worker (installabilité uniquement) ----------
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(() => log('Service worker enregistré', 'event'))
+        .catch((err) => log('Échec enregistrement service worker : ' + err.message, 'error'));
+    });
+  } else {
+    log('Service workers non supportés sur ce navigateur', 'error');
+  }
+
+  // ---------- État initial ----------
+
+  if (!('wakeLock' in navigator)) {
+    updateWakeLockUI('unsupported');
+    wakeLockBtn.disabled = true;
+  }
+
+  timeDisplay.textContent = formatRemaining(DURATION_MS);
+  log('Page chargée. display-mode standalone = ' + window.matchMedia('(display-mode: standalone)').matches, 'event');
+  log('navigator.vibrate support = ' + ('vibrate' in navigator), 'event');
+  log('navigator.wakeLock support = ' + ('wakeLock' in navigator), 'event');
+})();
+</script>
+</body>
+</html>
